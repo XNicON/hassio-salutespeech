@@ -1,0 +1,17 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "language": "Язык",
+                    "authentication": "Авторизационные данные",
+                    "voice": "Голос",
+                    "rate": "Частота дискретизации"
+                }
+            }
+        },
+        "abort": {
+            "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+        }
+    }
+}

@@ -2,7 +2,10 @@ API_AUTH_ENDPOINT = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth'
 API_TTS_ENDPOINT = 'https://smartspeech.sber.ru/rest/v1/text:synthesize'
 DOMAIN = 'sbertts'
 
-SUPPORT_LANGUAGES = ['ru-RU', 'en-US']
+SUPPORT_LANGUAGES = [
+    'ru-RU',
+    'en-US'
+]
 
 SUPPORT_VOICES = {
     'Nec': 'Наталья',
@@ -13,6 +16,21 @@ SUPPORT_VOICES = {
     'Pon': 'Сергей',
     'Kin': 'EN Kira',
 }
+
+MAP_VOICES = {
+    'ru-RU': {
+        'Nec': 'Наталья',
+        'Bys': 'Борис',
+        'May': 'Марфа',
+        'Tur': 'Тарас',
+        'Ost': 'Александра',
+        'Pon': 'Сергей',
+    },
+    'en-US': {
+        'Kin': 'Kira',
+    }
+}
+
 
 SUPPORT_RATE = [
     '24000',

@@ -7,7 +7,7 @@ from typing import Any
 import aiohttp
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
-from homeassistant.components.tts import CONF_LANG, PLATFORM_SCHEMA, Provider, TextToSpeechEntity, TtsAudioType
+from homeassistant.components.tts import CONF_LANG, PLATFORM_SCHEMA, Provider, TextToSpeechEntity, TtsAudioType, Voice
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_AUTHENTICATION
 from homeassistant.core import HomeAssistant, callback
@@ -58,6 +58,13 @@ class SaluteSpeechProvider(Provider):
     def supported_options(self):
         """Return a list of supported options."""
         return SUPPORT_OPTIONS
+
+    @callback
+    def async_get_supported_voices(self, language: str) -> list[Voice] | None:
+        """Return a list of supported voices for a language."""
+        if not (voices := MAP_VOICES.get(language)):
+            return None
+        return [Voice(voice, name) for voice, name in voices.items()]
 
     async def async_get_tts_audio(self, message: str, language: str, options: dict[str, Any]) -> TtsAudioType:
         return await self._salute_speech.send_text_to_cloud(

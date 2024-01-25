@@ -1,10 +1,10 @@
 {
-  "domain": "sbertts",
-  "name": "SaluteSpeech TTS",
-  "documentation": "",
-  "requirements": [],
-  "dependencies": [],
-  "version": "1.0.0",
-  "codeowners": [],
-  "iot_class": "cloud_push"
+    "domain": "sbertts",
+    "name": "SaluteSpeech TTS",
+    "version": "1.0.1",
+    "documentation": "",
+    "requirements": [],
+    "dependencies": [],
+    "codeowners": [],
+    "iot_class": "cloud_push"
 }

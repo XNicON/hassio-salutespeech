@@ -25,7 +25,7 @@ tts:
     authentication: 'Авторизационные данные'
     language: ru-RU
     voice: Nec
-    rate: 24000
+    rate: '24000'
 ```
 authentication - готовый токен basic авторизации, взять можно в ЛК или сделать самому закодировать в base64 строку `client_id:client_secret`
 

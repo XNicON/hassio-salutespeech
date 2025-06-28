@@ -6,7 +6,8 @@
                     "language": "Language",
                     "authentication": "Base64 authData",
                     "voice": "Announcer",
-                    "rate": "Frequency"
+                    "rate": "Frequency",
+                    "flow_restriction": "Number of available threads"
                 }
             }
         },

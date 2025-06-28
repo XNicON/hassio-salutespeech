@@ -1,6 +1,7 @@
 {
     "domain": "sbertts",
     "name": "SaluteSpeech TTS",
+    "config_flow": true,
     "version": "1.0.1",
     "documentation": "",
     "requirements": [],

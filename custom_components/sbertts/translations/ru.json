@@ -1,4 +1,15 @@
 {
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "language": "Язык по умолчанию",
+                    "voice": "Голос по умолчанию",
+                    "rate": "Частота по умолчанию"
+                }
+            }
+        }
+    },
     "config": {
         "step": {
             "user": {
@@ -11,7 +22,8 @@
             }
         },
         "abort": {
-            "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+            "already_configured": "Интеграция уже настроена.",
+            "onboarding_not_supported": "Онбординг не поддерживается для этой интеграции. Добавьте её вручную."
         }
     }
 }

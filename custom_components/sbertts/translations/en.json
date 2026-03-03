@@ -1,4 +1,15 @@
 {
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "language": "Default language",
+                    "voice": "Default voice",
+                    "rate": "Default frequency"
+                }
+            }
+        }
+    },
     "config": {
         "step": {
             "user": {
@@ -11,7 +22,8 @@
             }
         },
         "abort": {
-            "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+            "already_configured": "Integration is already configured.",
+            "onboarding_not_supported": "Onboarding is not supported for this integration. Add it manually."
         }
     }
 }

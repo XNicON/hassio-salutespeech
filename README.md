@@ -17,16 +17,17 @@
 
 скопировать `sbertts` в custom_components
 
-в `configuration.yaml` добавить
+### Настройка через UI
+`Настройки -> Устройства и службы -> Добавить интеграцию -> SaluteSpeech TTS`
 
-```
-tts:
-  - platform: sbertts
-    authentication: 'Авторизационные данные'
-    language: ru-RU
-    voice: Nec
-    rate: 24000
-```
+Укажите:
+- `authentication` (base64 `client_id:client_secret`)
+- `language`
+- `voice`
+- `rate`
+
+После добавления интеграции можно менять дефолтные `language/voice/rate` через:
+`Настройки -> Устройства и службы -> SaluteSpeech TTS -> Настроить`.
 authentication - готовый токен basic авторизации, взять можно в ЛК или сделать самому закодировать в base64 строку `client_id:client_secret`
 
 Доступные `voice`
@@ -49,11 +50,19 @@ __Kira доступна только при использовании англ�
 #### Использование в автоматизациях:
 
 ```
-service: tts.sbertts_say
+action: tts.speak
+target:
+  entity_id: tts.salutespeech
 data:
-  entity_id: media_player.bt_03
+  media_player_entity_id: media_player.bt_03
   message: "Текст"
+  options:
+    language: ru-RU
+    voice: Nec
+    rate: "24000"
 ```
+
+Можно менять `voice/rate/language` в `options` на каждый вызов, не создавая отдельные интеграции под каждый голос.
 
 Поддерживается язык SSML, нужно использовать тег `<speak>`
 https://developers.sber.ru/docs/ru/salutespeech/synthesis/ssml
@@ -64,7 +73,5 @@ https://developers.sber.ru/docs/ru/salutespeech/synthesis/ssml
 Все желающие, кто может внести улучшения, присылайте PR
 
 Что хотелось бы реализовать:
-* Компонент, чтобы можно было добавить сразу несколько голосов, через кнопку Добавить интеграцию в устройствах, как это можно сделать с Google Translate
 * Вывести в аттрибуты количество оставшегося запаса символов (но я не нашёл как это сделать через API)
 * Добавить так же распознавание речи из аудио (STT)
-* токен авторизации чтобы обновлялся только по истечению времени, а не каждый запрос

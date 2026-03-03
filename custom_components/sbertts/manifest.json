@@ -1,10 +1,11 @@
 {
     "domain": "sbertts",
     "name": "SaluteSpeech TTS",
-    "version": "1.0.1",
-    "documentation": "",
+    "version": "1.1.0",
+    "documentation": "https://github.com/XNicON/hassio-salutespeech/blob/main/README.md",
     "requirements": [],
     "dependencies": [],
     "codeowners": [],
-    "iot_class": "cloud_push"
+    "iot_class": "cloud_push",
+    "config_flow": true
 }

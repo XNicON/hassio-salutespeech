@@ -1,63 +1,90 @@
 import asyncio
 import logging
+import time
 import uuid
 from http import HTTPStatus
 from typing import Any
 
 import aiohttp
-import homeassistant.helpers.config_validation as cv
-import voluptuous as vol
-from homeassistant.components.tts import CONF_LANG, PLATFORM_SCHEMA, Provider, TextToSpeechEntity, TtsAudioType, Voice
+from homeassistant.components.tts import (
+    CONF_LANG,
+    TextToSpeechEntity,
+    TtsAudioType,
+    Voice,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_AUTHENTICATION
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import *
+from .const import (
+    API_AUTH_ENDPOINT,
+    API_TTS_ENDPOINT,
+    CODEC_FORMAT,
+    CONF_RATE,
+    CONF_VOICE,
+    DEFAULT_LANG,
+    DEFAULT_RATE,
+    DEFAULT_VOICE,
+    MAP_VOICES,
+    SUPPORT_LANGUAGES,
+)
 
 _LOGGER = logging.getLogger(__name__)
+TTS_OPTIONS = [CONF_LANG, CONF_VOICE, CONF_RATE]
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Required(CONF_AUTHENTICATION): cv.string,
-    vol.Optional(CONF_LANG, default=DEFAULT_LANG): vol.In(SUPPORT_LANGUAGES),
-    vol.Optional(CONF_VOICE, default=DEFAULT_VOICE): vol.In(SUPPORT_VOICES.keys()),
-    vol.Optional(CONF_RATE, default=DEFAULT_RATE): vol.In(SUPPORT_RATE),
-})
-
-
-async def async_get_engine(hass, config, discovery_info=None):
-    """Set up SaluteSpeech TTS component."""
-    return SaluteSpeechProvider(hass, config)
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up SaluteSpeech TTS from a config entry."""
+    async_add_entities([SaluteSpeechTTSEntity(hass, config_entry)])
 
 
-class SaluteSpeechProvider(Provider):
-    def __init__(self, hass, conf):
-        self.name = 'SaluteSpeech'
-        self.hass = hass
+class SaluteSpeechTTSEntity(TextToSpeechEntity):
+    """SaluteSpeech TTS entity for config entry setup."""
 
-        self._client_auth_token = conf[CONF_AUTHENTICATION]
-        self._lang = conf[CONF_LANG]
-        self._rate = conf[CONF_RATE]
-        self._voice = conf[CONF_VOICE]
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+        data = config_entry.data
+        options = config_entry.options
         self._salute_speech = SaluteSpeechCloud(hass)
+        self._client_auth_token = data.get(CONF_AUTHENTICATION, "")
+        self._lang = options.get(CONF_LANG, data.get(CONF_LANG, DEFAULT_LANG))
+        self._rate = options.get(CONF_RATE, data.get(CONF_RATE, DEFAULT_RATE))
+        self._voice = self._get_voice(options.get(CONF_VOICE, data.get(CONF_VOICE)), self._lang)
+        voice_name = MAP_VOICES.get(self._lang, {}).get(self._voice, self._voice)
+
+        self._attr_name = (
+            f"SaluteSpeech {voice_name} ({self._voice}, {self._lang}, {self._rate})"
+        )
+        self._attr_unique_id = config_entry.entry_id
 
     @property
-    def default_language(self):
+    def default_language(self) -> str:
         """Return the default language."""
         return self._lang
 
     @property
-    def supported_languages(self):
+    def supported_languages(self) -> list[str]:
         """Return list of supported languages."""
         return SUPPORT_LANGUAGES
 
     @property
-    def supported_options(self):
+    def supported_options(self) -> list[str]:
         """Return a list of supported options."""
-        return SUPPORT_OPTIONS
+        return TTS_OPTIONS
+
+    @property
+    def default_options(self) -> dict[str, str]:
+        """Return a dict with default options."""
+        return {
+            CONF_LANG: self._lang,
+            CONF_VOICE: self._voice,
+            CONF_RATE: self._rate,
+        }
 
     @callback
     def async_get_supported_voices(self, language: str) -> list[Voice] | None:
@@ -66,29 +93,47 @@ class SaluteSpeechProvider(Provider):
             return None
         return [Voice(voice, name) for voice, name in voices.items()]
 
-    async def async_get_tts_audio(self, message: str, language: str, options: dict[str, Any]) -> TtsAudioType:
-        return await self._salute_speech.send_text_to_cloud(
-            message,
-            self._client_auth_token,
-            self.get_voice(options.get(CONF_VOICE), options.get(CONF_LANG)),
-            self._rate
-        )
+    async def async_get_tts_audio(
+        self, message: str, language: str, options: dict[str, Any]
+    ) -> TtsAudioType:
+        if not self._client_auth_token:
+            raise HomeAssistantError("Missing SaluteSpeech authentication token")
+        options = options or {}
 
-    def get_voice(self, voice: str|None, lang: str | None) -> str:
-        voice = voice or self._voice
-        lang = lang or self._lang
+        target_lang = options.get(CONF_LANG, language) or self._lang
+        target_voice = self._get_voice(options.get(CONF_VOICE), target_lang)
+        target_rate = options.get(CONF_RATE, self._rate)
 
-        if lang == 'en-US':
-            voice = 'Kin'
-        elif lang == 'ru-RU' and voice == 'Kin':
-            voice = 'Nec'
+        try:
+            return await self._salute_speech.send_text_to_cloud(
+                message,
+                self._client_auth_token,
+                target_voice,
+                target_rate,
+            )
+        except Exception as exc:
+            _LOGGER.debug("Error during processing of TTS request %s", exc, exc_info=True)
+            raise HomeAssistantError(exc) from exc
+
+    def _get_voice(self, voice: str | None, lang: str | None) -> str:
+        if voice is None:
+            voice = getattr(self, "_voice", DEFAULT_VOICE)
+        if lang is None:
+            lang = getattr(self, "_lang", DEFAULT_LANG)
+
+        if lang == "en-US":
+            voice = "Kin"
+        elif lang == "ru-RU" and voice == "Kin":
+            voice = "Nec"
 
         return voice
 
 
 class SaluteSpeechCloud:
-    def __init__(self, hass):
+    def __init__(self, hass: HomeAssistant) -> None:
         self._http_client = async_get_clientsession(hass, False)
+        self._token_cache: dict[str, tuple[str, float]] = {}
+        self._auth_lock = asyncio.Lock()
 
     async def send_text_to_cloud(
             self,
@@ -107,7 +152,7 @@ class SaluteSpeechCloud:
 
                 is_ssml = message.find('<speak>') != -1
 
-                request = await self._http_client.post(
+                async with self._http_client.post(
                     url=API_TTS_ENDPOINT,
                     headers={
                         'Authorization': 'Bearer {}'.format(bearer_token),
@@ -118,111 +163,78 @@ class SaluteSpeechCloud:
                         'voice': announcer + '_' + rate,
                     },
                     data=message
-                )
+                ) as request:
+                    data = await request.read()
 
-                data = await request.read()
+                    if request.status != HTTPStatus.OK:
+                        _LOGGER.error('Error %d on load URL %s. Response %s' % (request.status, request.url, data))
+                        return None, None
 
-                if request.status != HTTPStatus.OK:
-                    _LOGGER.error('Error %d on load URL %s. Response %s' % (request.status, request.url, data))
-                    return None, None
-
-                return CODEC_FORMAT.get(codec), data
+                    return CODEC_FORMAT.get(codec), data
         except (asyncio.TimeoutError, aiohttp.ClientError):
             _LOGGER.error('Timeout for speech kit API')
             return None, None
 
     async def get_auth_token(self, base64_auth_token: str) -> str | None:
-        async with asyncio.timeout(10):
-            request = await self._http_client.post(
-                url=API_AUTH_ENDPOINT,
-                headers={
-                    'Authorization': 'Basic {}'.format(base64_auth_token),
-                    'RqUID': str(uuid.uuid4()),
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                data={
-                    'scope': 'SALUTE_SPEECH_PERS',
-                }
-            )
+        cached_token = self._get_cached_token(base64_auth_token)
+        if cached_token is not None:
+            return cached_token
 
-            if request.status != HTTPStatus.OK:
-                error = await request.read()
-                _LOGGER.error('Error %d on load URL %s. Response %s' % (request.status, request.url, error))
-                return None
+        try:
+            async with self._auth_lock:
+                cached_token = self._get_cached_token(base64_auth_token)
+                if cached_token is not None:
+                    return cached_token
 
-            data = await request.json()
+                async with asyncio.timeout(10):
+                    async with self._http_client.post(
+                        url=API_AUTH_ENDPOINT,
+                        headers={
+                            'Authorization': 'Basic {}'.format(base64_auth_token),
+                            'RqUID': str(uuid.uuid4()),
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        data={
+                            'scope': 'SALUTE_SPEECH_PERS',
+                        }
+                    ) as request:
+                        if request.status != HTTPStatus.OK:
+                            error = await request.read()
+                            _LOGGER.error('Error %d on load URL %s. Response %s' % (request.status, request.url, error))
+                            return None
 
-            return data.get('access_token')
+                        data = await request.json()
+                        access_token = data.get('access_token')
+                        if not access_token:
+                            _LOGGER.error("Auth response has no access_token: %s", data)
+                            return None
 
-#
-#
-# async def async_setup_entry(
-#         hass: HomeAssistant,
-#         config_entry: ConfigEntry,
-#         async_add_entities: AddEntitiesCallback,
-# ) -> None:
-#     async_add_entities([
-#         SaluteSpeechTTSEntity(hass, config_entry)
-#     ])
-#
-#
-# class SaluteSpeechTTSEntity(TextToSpeechEntity):
-#     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-#         self._salute_speech = SaluteSpeechCloud(hass)
-#         self._lang = config_entry.data[CONF_LANG]
-#         self._voice = config_entry.data[CONF_VOICE]
-#
-#         if self._lang == 'en-US':
-#             self._voice = 'Kin'
-#         elif self._lang == 'ru-RU' and self._voice == 'Kin':
-#             self._voice = 'Nec'
-#
-#         self._attr_name = f"SaluteSpeech {SUPPORT_VOICES[self._voice]}"
-#         self._attr_unique_id = config_entry.entry_id
-#
-#     @property
-#     def default_language(self):
-#         """Return the default language."""
-#         return self._lang
-#
-#     @property
-#     def supported_languages(self):
-#         """Return list of supported languages."""
-#         return SUPPORT_LANGUAGES
-#
-#     @property
-#     def supported_options(self):
-#         """Return a list of supported options."""
-#         return SUPPORT_OPTIONS
-#
-#     @property
-#     def default_options(self):
-#         """Return a dict include default options."""
-#         return {
-#             CONF_LANG: DEFAULT_LANG,
-#             CONF_VOICE: DEFAULT_VOICE,
-#             CONF_RATE: DEFAULT_RATE
-#         }
-#
-#     @callback
-#     def async_get_supported_voices(self, lang: str) -> list[str] | None:
-#         """Return a list of supported voices for a language."""
-#
-#         if lang == 'ru-RU':
-#             return SUPPORT_VOICES.values()
-#
-#         return [v for k, v in SUPPORT_VOICES.items() if k != 'Kin']
-#
-#     async def async_get_tts_audio(
-#             self, message: str, language: str, options: dict[str, Any] | None = None
-#     ) -> TtsAudioType:
-#         try:
-#             return await self._salute_speech.send_text_to_cloud(
-#                 message,
-#                 options[CONF_AUTHENTICATION],
-#                 self._voice,
-#                 options[CONF_RATE]
-#             )
-#         except Exception as exc:
-#             _LOGGER.debug("Error during processing of TTS request %s", exc, exc_info=True)
-#             raise HomeAssistantError(exc) from exc
+                        self._store_cached_token(base64_auth_token, data)
+                        return access_token
+        except (asyncio.TimeoutError, aiohttp.ClientError):
+            _LOGGER.error('Timeout while requesting SaluteSpeech auth token')
+            return None
+
+    def _get_cached_token(self, base64_auth_token: str) -> str | None:
+        cached = self._token_cache.get(base64_auth_token)
+        if cached is None:
+            return None
+
+        access_token, expires_at = cached
+        if time.time() >= expires_at - 30:
+            self._token_cache.pop(base64_auth_token, None)
+            return None
+
+        return access_token
+
+    def _store_cached_token(self, base64_auth_token: str, payload: dict[str, Any]) -> None:
+        access_token = payload.get("access_token")
+        expires_at = payload.get("expires_at")
+
+        try:
+            expires_at_val = float(expires_at)
+        except (TypeError, ValueError):
+            _LOGGER.error("Auth response has invalid expires_at: %s", expires_at)
+            return
+
+        self._token_cache[base64_auth_token] = (access_token, expires_at_val)

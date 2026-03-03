@@ -5,6 +5,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.tts import CONF_LANG
 from homeassistant.const import CONF_AUTHENTICATION
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 
@@ -26,25 +27,54 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial step."""
         if user_input is not None:
-            self._async_abort_entries_match({
-                CONF_AUTHENTICATION: user_input[CONF_AUTHENTICATION],
-                CONF_LANG: user_input[CONF_LANG],
-                CONF_VOICE: user_input[CONF_VOICE],
-                CONF_RATE: user_input[CONF_RATE],
-            })
-            return self.async_create_entry(
-                title="SaluteSpeech text-to-speech", data=user_input
+            self._async_abort_entries_match(
+                {
+                    CONF_AUTHENTICATION: user_input[CONF_AUTHENTICATION],
+                    CONF_LANG: user_input[CONF_LANG],
+                    CONF_VOICE: user_input[CONF_VOICE],
+                    CONF_RATE: user_input[CONF_RATE],
+                }
             )
+
+            return self.async_create_entry(title="SaluteSpeech", data=user_input)
 
         return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
     async def async_step_onboarding(self, data: dict[str, Any] | None = None) -> FlowResult:
         """Handle a flow initialized by onboarding."""
-        return self.async_create_entry(
-            title="SaluteSpeech text-to-speech",
-            data={
-                CONF_LANG: DEFAULT_LANG,
-                CONF_VOICE: DEFAULT_VOICE,
-                CONF_RATE: DEFAULT_RATE,
-            },
+        return self.async_abort(reason="onboarding_not_supported")
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry):
+        return OptionsFlow(config_entry)
+
+
+class OptionsFlow(config_entries.OptionsFlow):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        data = self._config_entry.data
+        options = self._config_entry.options
+
+        options_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_LANG, default=options.get(CONF_LANG, data.get(CONF_LANG, DEFAULT_LANG))
+                ): vol.In(SUPPORT_LANGUAGES),
+                vol.Optional(
+                    CONF_VOICE, default=options.get(CONF_VOICE, data.get(CONF_VOICE, DEFAULT_VOICE))
+                ): vol.In(SUPPORT_VOICES.keys()),
+                vol.Optional(
+                    CONF_RATE, default=options.get(CONF_RATE, data.get(CONF_RATE, DEFAULT_RATE))
+                ): vol.In(SUPPORT_RATE),
+            }
         )
+
+        return self.async_show_form(step_id="init", data_schema=options_schema)
